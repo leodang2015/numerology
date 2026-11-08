@@ -104,6 +104,13 @@ export default function App() {
   // Action states
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [apiHealth, setApiHealth] = useState<'checking' | 'online' | 'offline'>('checking');
+
+  useEffect(() => {
+    fetch('/api/health')
+      .then(res => res.ok ? setApiHealth('online') : setApiHealth('offline'))
+      .catch(() => setApiHealth('offline'));
+  }, []);
 
   // Forms
   const [loginEmail, setLoginEmail] = useState('ana@example.com');
@@ -171,12 +178,27 @@ export default function App() {
     setCalcSoulNum(calculatePythagorean(calcName, true));
   }, [calcName, calcBirthDate]);
 
+  async function safeFetchJson(url: string, options?: RequestInit) {
+    const res = await fetch(url, options);
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const data = await res.json();
+      return { ok: res.ok, status: res.status, data };
+    }
+    const text = await res.text();
+    throw new Error(
+      res.status === 404
+        ? `Error 404: El endpoint ${url} no responde JSON. En Vercel, asegúrate de que vercel.json esté en la raíz del repositorio y que las Variables de Entorno (MONGODB_URI, SECRETORPRIVATEKEY, GEMINI_API_KEY) estén configuradas en Settings -> Environment Variables.`
+        : `Error ${res.status}: El servidor no respondió con JSON válido (${text.slice(0, 80)}...)`
+    );
+  }
+
   // Load basic resources on mount
   const fetchProfiles = async () => {
     try {
-      const res = await fetch('/api/v1/numerology-profiles');
-      if (res.ok) {
-        const data = await res.json();
+      const result = await safeFetchJson('/api/v1/numerology-profiles');
+      if (result.ok) {
+        const data = result.data;
         setProfiles(Array.isArray(data) ? data : []);
         if (data.length > 0 && !selectedProfileId) {
           setSelectedProfileId(data[0]._id);
@@ -186,62 +208,58 @@ export default function App() {
           }
         }
       }
-    } catch (err) {
-      console.warn("No se pudo cargar perfiles:", err);
+    } catch (err: any) {
+      console.warn("Aviso al cargar perfiles:", err.message);
     }
   };
 
   const fetchReadings = async () => {
     try {
-      const res = await fetch('/api/v1/readings');
-      if (res.ok) {
-        const data = await res.json();
-        setReadingsList(Array.isArray(data) ? data : []);
+      const result = await safeFetchJson('/api/v1/readings');
+      if (result.ok) {
+        setReadingsList(Array.isArray(result.data) ? result.data : []);
       }
-    } catch (err) {
-      console.warn("No se pudo cargar lecturas:", err);
+    } catch (err: any) {
+      console.warn("Aviso al cargar lecturas:", err.message);
     }
   };
 
   const fetchMatches = async () => {
     try {
-      const res = await fetch('/api/v1/compatibility-matches');
-      if (res.ok) {
-        const data = await res.json();
-        setMatchesList(Array.isArray(data) ? data : []);
+      const result = await safeFetchJson('/api/v1/compatibility-matches');
+      if (result.ok) {
+        setMatchesList(Array.isArray(result.data) ? result.data : []);
       }
-    } catch (err) {
-      console.warn("No se pudo cargar compatibilidad:", err);
+    } catch (err: any) {
+      console.warn("Aviso al cargar compatibilidad:", err.message);
     }
   };
 
   const fetchUsers = async () => {
     if (!token) return;
     try {
-      const res = await fetch('/api/v1/users', {
+      const result = await safeFetchJson('/api/v1/users', {
         headers: { 'x-token': token }
       });
-      if (res.ok) {
-        const data = await res.json();
-        setUsersList(Array.isArray(data) ? data : []);
+      if (result.ok) {
+        setUsersList(Array.isArray(result.data) ? result.data : []);
       }
-    } catch (err) {
-      console.warn("No se pudo cargar usuarios:", err);
+    } catch (err: any) {
+      console.warn("Aviso al cargar usuarios:", err.message);
     }
   };
 
   const fetchAuditLogs = async () => {
     if (!token) return;
     try {
-      const res = await fetch('/api/v1/audit-logs', {
+      const result = await safeFetchJson('/api/v1/audit-logs', {
         headers: { 'x-token': token }
       });
-      if (res.ok) {
-        const data = await res.json();
-        setAuditLogs(Array.isArray(data) ? data : []);
+      if (result.ok) {
+        setAuditLogs(Array.isArray(result.data) ? result.data : []);
       }
-    } catch (err) {
-      console.warn("No se pudo cargar auditoría:", err);
+    } catch (err: any) {
+      console.warn("Aviso al cargar auditoría:", err.message);
     }
   };
 
@@ -260,13 +278,12 @@ export default function App() {
     setLoading(true);
     setMessage(null);
     try {
-      const res = await fetch('/api/v1/users/login', {
+      const { ok, data } = await safeFetchJson('/api/v1/users/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: loginEmail, password_hash: loginPassword })
       });
-      const data = await res.json();
-      if (res.ok) {
+      if (ok) {
         setToken(data.token);
         setCurrentUser(data.usuario);
         localStorage.setItem('numerologia_token', data.token);
@@ -287,7 +304,7 @@ export default function App() {
     setLoading(true);
     setMessage(null);
     try {
-      const res = await fetch('/api/v1/users', {
+      const { ok, data } = await safeFetchJson('/api/v1/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -297,8 +314,7 @@ export default function App() {
           fecha_nacimiento: regDate
         })
       });
-      const data = await res.json();
-      if (res.ok) {
+      if (ok) {
         setMessage({ type: 'success', text: 'Usuario registrado exitosamente. Ahora puedes iniciar sesión.' });
         setLoginEmail(regEmail);
         setLoginPassword(regPass);
@@ -329,7 +345,7 @@ export default function App() {
     setLoading(true);
     setMessage(null);
     try {
-      const res = await fetch('/api/v1/numerology-profiles', {
+      const { ok, data } = await safeFetchJson('/api/v1/numerology-profiles', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -342,8 +358,7 @@ export default function App() {
           numero_alma: calcSoulNum
         })
       });
-      const data = await res.json();
-      if (res.ok) {
+      if (ok) {
         setMessage({ type: 'success', text: '¡Perfil numerológico guardado en MongoDB con éxito!' });
         fetchProfiles();
       } else {
@@ -369,7 +384,7 @@ export default function App() {
     setLoading(true);
     setMessage(null);
     try {
-      const res = await fetch('/api/v1/readings/generate', {
+      const { ok, data } = await safeFetchJson('/api/v1/readings/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -380,8 +395,7 @@ export default function App() {
           tipo_lectura: selectedReadingType
         })
       });
-      const data = await res.json();
-      if (res.ok) {
+      if (ok) {
         setLatestReading(data);
         fetchReadings();
         setMessage({ 
@@ -417,7 +431,7 @@ export default function App() {
     setLoading(true);
     setMessage(null);
     try {
-      const res = await fetch('/api/v1/compatibility-matches/analyze', {
+      const { ok, data } = await safeFetchJson('/api/v1/compatibility-matches/analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -428,8 +442,7 @@ export default function App() {
           perfil_id_compatibilidad: otherProfileId
         })
       });
-      const data = await res.json();
-      if (res.ok) {
+      if (ok) {
         setLatestMatch(data);
         fetchMatches();
         setMessage({ type: 'success', text: '¡Análisis de compatibilidad generado con Gemini!' });
@@ -460,8 +473,18 @@ export default function App() {
             </div>
           </div>
 
-          {/* User auth badge */}
           <div className="flex items-center gap-3">
+            {/* API Health Pill */}
+            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] bg-slate-900 border border-slate-800">
+              <span className={`w-2 h-2 rounded-full ${
+                apiHealth === 'online' ? 'bg-emerald-400 animate-pulse' :
+                apiHealth === 'checking' ? 'bg-amber-400' : 'bg-rose-400'
+              }`}></span>
+              <span className="text-slate-300 font-mono">
+                {apiHealth === 'online' ? 'Backend Online' : apiHealth === 'checking' ? 'Conectando...' : 'Backend 404'}
+              </span>
+            </div>
+
             {currentUser ? (
               <div className="flex items-center gap-3 bg-slate-800/80 px-3 py-1.5 rounded-full border border-slate-700">
                 <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-bold">
@@ -573,6 +596,19 @@ export default function App() {
       </div>
 
       {/* Feedback Banner */}
+      {apiHealth === 'offline' && (
+        <div className="bg-amber-950/80 border-b border-amber-800/80 px-4 py-2.5 text-xs text-amber-200">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>
+                <strong>Aviso de Despliegue en Vercel:</strong> El backend no respondió JSON. Para que funcione en Vercel se requiere el archivo <code className="bg-amber-900/60 px-1 py-0.5 rounded">vercel.json</code>, la carpeta <code className="bg-amber-900/60 px-1 py-0.5 rounded">api/index.js</code> y configurar las Variables de Entorno en el panel de Vercel.
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {message && (
         <div className={`p-3 text-sm flex items-center justify-between border-b ${
           message.type === 'success' 
