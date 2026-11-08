@@ -1,0 +1,6 @@
+{
+  "name": "Numerología IA - API y Plataforma de Lecturas",
+  "description": "Sistema y plataforma de numerología y compatibilidad impulsada por IA con gestión de perfiles, lecturas analíticas y registros.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
